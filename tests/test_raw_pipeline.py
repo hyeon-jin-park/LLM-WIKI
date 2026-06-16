@@ -35,7 +35,11 @@ class RawPipelineTest(unittest.TestCase):
         self.assertIn("Context Window", wiki_tool.read_raw_item(markdown["path"])["text"])
         draft = wiki_tool.draft_page_from_raw(markdown["path"], "concept")
         self.assertEqual(draft["suggested_path"], "concepts/context-window.md")
+        self.assertIn("- Scope:", draft["content"])
+        self.assertIn("- Signals:", draft["content"])
         self.assertIn("## Key Points", draft["content"])
+        self.assertIn("## Source Excerpt", draft["content"])
+        self.assertNotIn("Review and replace", draft["content"])
         self.assertEqual(wiki_tool.list_pages(), [])
 
     def test_publish_moves_source_and_preserves_trace(self):

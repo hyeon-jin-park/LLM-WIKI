@@ -1,12 +1,12 @@
 # LLM WIKI
 
-LLM WIKI는 사용자가 가진 Markdown, TXT, PDF 자료를 로컬에서 읽고, 검토 가능한 Markdown Wiki 페이지로 바꾸는 실행 가능한 Wiki 도구입니다. 처음 실행하면 Wiki는 비어 있으며, 사용자가 자료 1건을 넣고 초안을 승인하면 자기만의 Wiki 페이지가 만들어집니다.
+LLM WIKI는 Markdown, TXT, PDF 자료를 로컬에서 읽고 검토 가능한 Markdown Wiki 페이지로 바꾸는 작은 지식베이스 도구입니다. 빈 Wiki로 시작해도 되고, 직접 자료를 넣어 개인용 문서 저장소처럼 키워도 됩니다.
 
-자료 저장, 초안 생성, Wiki 반영, 검증은 모두 로컬 파일과 MCP Tool을 통해 동작합니다. 선택적 Chat 기능도 앱 내부에 별도 서비스 키를 보관하지 않고, 사용자의 로컬 CLI가 있을 때만 읽기 전용 subprocess로 연결됩니다.
+자료 저장, 초안 생성, Wiki 반영, 검증은 모두 로컬 파일과 MCP Tool을 통해 동작합니다. 선택적 Chat 기능은 사용자의 로컬 CLI가 있을 때만 읽기 전용 subprocess로 연결됩니다.
 
 ![LLM WIKI empty workspace](mvp.png)
 
-실제 지식베이스가 렌더링된 예시는 [demo/usage-example.png](demo/usage-example.png)에 있습니다. 예시 내용은 실행 데이터로 포함되지 않습니다.
+Wiki가 렌더링된 화면 예시는 [demo/usage-example.png](demo/usage-example.png)에 있습니다. 예시 이미지는 실행 데이터로 사용되지 않습니다.
 
 ## 포함된 구성
 
@@ -22,8 +22,8 @@ LLM WIKI는 사용자가 가진 Markdown, TXT, PDF 자료를 로컬에서 읽고
 ## Repository 구조
 
 ```text
-raw/                 # 사용자가 넣는 원본 자료. 공개본은 비어 있음
-wiki/                # 승인된 Markdown Wiki 페이지. 공개본은 비어 있음
+raw/                 # 사용자가 넣는 원본 자료. 기본 상태는 비어 있음
+wiki/                # 승인된 Markdown Wiki 페이지. 기본 상태는 비어 있음
 schema/              # Wiki 페이지와 raw item 규약
 tools/               # stdio MCP 서버
 src/                 # Wiki Tool, MCP client, 선택적 CLI chat 연동
@@ -35,7 +35,7 @@ RULES.md             # 보안, 출처, 승인, 검증 규칙
 README.md            # 실행 및 사용 설명
 ```
 
-공개본의 `raw/`와 `wiki/`에는 `.gitkeep`만 들어 있습니다. 개인 자료나 미리 채워진 Wiki 페이지는 포함하지 않습니다.
+기본 저장소의 `raw/`와 `wiki/`에는 `.gitkeep`만 들어 있습니다. 개인 자료나 미리 채워진 Wiki 페이지는 포함하지 않습니다.
 
 ## 빠른 시작
 
@@ -68,7 +68,7 @@ python3 run.py --no-open
 
 자료 추가, 초안 생성, Wiki 저장은 Python 서버와 MCP subprocess만으로 동작합니다. Codex CLI는 선택적 Chat 탭에서만 사용됩니다.
 
-### 2. 자료 1건 추가
+### 2. 자료 추가
 
 1. 화면 중앙의 **첫 자료 추가** 또는 상단의 **+ 자료 추가**를 누릅니다.
 2. `.md`, `.txt`, 텍스트 기반 `.pdf` 중 하나를 선택합니다.
@@ -97,9 +97,9 @@ wiki/           → 생성된 Markdown Wiki 페이지
 
 Wiki 페이지에는 `raw_source`, `source_url`, `last_verified` 같은 메타데이터가 들어가며, `source_trace` Tool로 원본과 Wiki 페이지의 연결을 확인할 수 있습니다.
 
-## 자료 투입 → 초안 → 승인 → 통합
+## Import Flow
 
-이 프로젝트의 핵심 파이프라인은 다음과 같습니다.
+자료는 바로 Wiki에 들어가지 않습니다. 먼저 초안을 만들고, 사용자가 확인한 뒤 저장합니다.
 
 ```text
 사용자 자료
@@ -146,7 +146,7 @@ MCP host 설정 예시는 `mcp-config.example.json`에 있습니다.
 | `validate_wiki` | 메타데이터, 필수 섹션, 출처, 링크, 중복 제목을 검사합니다. |
 | `upsert_page` | 승인된 Markdown 페이지를 생성하거나 갱신합니다. |
 
-## Agent 통합 요청 예시
+## Agent 사용 예시
 
 Agent에게는 다음처럼 요청할 수 있습니다.
 
@@ -171,7 +171,7 @@ After publishing, run source_trace and validate_wiki.
 3. `codex exec --ephemeral --sandbox read-only`를 subprocess로 실행합니다.
 4. Codex CLI는 읽기 전용 답변만 작성합니다.
 
-이 기능은 별도 클라우드 인증 정보를 요구하지 않습니다. Chat은 Wiki 페이지를 직접 생성하거나 수정할 수 없고, 변경 요청은 자료 추가/초안 승인 흐름으로 안내합니다.
+Chat은 Wiki 페이지를 직접 생성하거나 수정할 수 없습니다. 변경 요청은 자료 추가/초안 승인 흐름으로 안내합니다.
 
 Codex CLI가 없어도 Wiki Viewer, MCP Tool, 자료 투입 파이프라인은 정상 동작합니다.
 
@@ -190,7 +190,7 @@ python3 run.py --check
 .venv/bin/python tests/mcp_smoke.py
 ```
 
-깨끗한 공개본에서 기대되는 결과:
+빈 Wiki에서 기대되는 결과:
 
 ```text
 0 pages, 12 MCP tools
@@ -199,10 +199,10 @@ unit tests: OK
 MCP smoke: validate_ok true
 ```
 
-## 개인정보와 공개
+## Local Data
 
 - 원본 자료와 Wiki 저장은 로컬에서 수행됩니다.
-- 공개본에는 개인 raw 자료를 넣지 않습니다.
-- 공개본의 `raw/`와 `wiki/`는 빈 폴더 구조만 제공합니다.
+- 저장소에 개인 raw 자료를 넣지 않는 것을 권장합니다.
+- 기본 `raw/`와 `wiki/`는 빈 폴더 구조만 제공합니다.
 - `.env`, 개인 자료, cache, `.venv`, archive 폴더는 Git에서 제외합니다.
-- `demo/usage-example.png`는 사용 증명용 화면 캡처이며 실행 데이터가 아닙니다.
+- `demo/usage-example.png`는 화면 예시이며 실행 데이터가 아닙니다.

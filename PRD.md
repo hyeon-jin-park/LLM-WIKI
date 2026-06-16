@@ -13,7 +13,7 @@ Enable a first-time user to clone an empty repository, add one source, review a 
 - Preserve source lineage and validate after every write.
 - Search, read, summarize, suggest links, trace sources, and edit pages.
 - Expose the same 12 operations through a real stdio MCP server.
-- Run with `python3 run.py` and require no API key or LLM installation.
+- Run with `python3 run.py` and work without external services or local LLM setup.
 - Offer optional read-only conversation when Codex CLI is already installed.
 
 ## Agent Specification

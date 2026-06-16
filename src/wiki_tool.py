@@ -247,10 +247,81 @@ def _slugify(value: str) -> str:
     return re.sub(r"[^a-z0-9가-힣]+", "-", value.lower()).strip("-")[:80] or "wiki-page"
 
 
+def _clean_source_text(text: str) -> str:
+    cleaned = re.sub(r"```[\s\S]*?```", " ", text)
+    cleaned = re.sub(r"`([^`]+)`", r"\1", cleaned)
+    cleaned = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", cleaned)
+    cleaned = re.sub(r"^#{1,6}\s+.+$", " ", cleaned, flags=re.MULTILINE)
+    cleaned = re.sub(r"^[>\-*+]\s+", "", cleaned, flags=re.MULTILINE)
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
+def _sentences(text: str, limit: int = 5) -> list[str]:
+    cleaned = _clean_source_text(text)
+    parts = re.split(r"(?<=[.!?。！？])\s+|\n+", cleaned)
+    picked: list[str] = []
+    for part in parts:
+        item = part.strip(" -\t")
+        if len(item) < 18 or item in picked:
+            continue
+        picked.append(item[:220])
+        if len(picked) >= limit:
+            break
+    return picked
+
+
+def _keywords(text: str, limit: int = 10) -> list[str]:
+    words = re.findall(r"[A-Za-z][A-Za-z0-9+\-]{2,}|[가-힣]{2,}", text)
+    stop = {
+        "the", "and", "for", "with", "from", "this", "that", "into", "when",
+        "where", "what", "how", "why", "are", "was", "were", "is", "to",
+        "of", "in", "on", "or", "as", "by", "it", "a", "an",
+        "그리고", "하지만", "대한", "위한", "있는", "없는", "에서", "으로",
+        "하면", "한다", "된다", "이다", "같은", "관련", "내용",
+    }
+    counts: dict[str, int] = {}
+    original: dict[str, str] = {}
+    for word in words:
+        key = word.casefold()
+        if key in stop or len(key) < 2:
+            continue
+        counts[key] = counts.get(key, 0) + 1
+        original.setdefault(key, word)
+    ranked = sorted(counts, key=lambda key: (-counts[key], key))
+    return [original[key] for key in ranked[:limit]]
+
+
 def _plain_summary(text: str) -> str:
-    cleaned = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
-    cleaned = re.sub(r"\s+", " ", cleaned).strip()
-    return cleaned[:420] + ("..." if len(cleaned) > 420 else "")
+    sentences = _sentences(text, 3)
+    terms = _keywords(text, 8)
+    lines = []
+    if sentences:
+        lines.append(f"- Scope: {sentences[0]}")
+    if len(sentences) > 1:
+        lines.append(f"- Useful for: {sentences[1]}")
+    if terms:
+        lines.append(f"- Signals: {', '.join(terms)}")
+    return "\n".join(lines) or "- Scope: Source text is available for review."
+
+
+def _key_points(text: str, limit: int = 5) -> list[str]:
+    bullets: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        match = re.match(r"^(?:[-*+]|\d+[.)]|[\uf06f•●▪◦○])\s+(.+)$", stripped)
+        if match:
+            item = _clean_source_text(match.group(1))
+            if item and item not in bullets:
+                bullets.append(item[:220])
+        if len(bullets) >= limit:
+            break
+    if len(bullets) < 3:
+        for sentence in _sentences(text, limit):
+            if sentence not in bullets:
+                bullets.append(sentence)
+            if len(bullets) >= limit:
+                break
+    return bullets or ["Source text is stored and ready for review."]
 
 
 def draft_page_from_raw(path: str, page_type: str = "note", title: str = "", tags: str = "imported") -> dict[str, Any]:
@@ -278,7 +349,9 @@ raw_source: {raw['path']}
 
 ## Key Points
 
-- Review and replace this generated excerpt with reusable knowledge.
+{chr(10).join(f"- {item}" for item in _key_points(source_text))}
+
+## Source Excerpt
 
 {excerpt}
 

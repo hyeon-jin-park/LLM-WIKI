@@ -29,5 +29,5 @@
 
 ## Public Repository
 
-- Do not publish API keys, private source files, archives, caches, or generated ZIP files.
+- Do not publish secrets, private source files, archives, caches, or generated ZIP files.
 - Demo images may prove usage but must not become required runtime data.
