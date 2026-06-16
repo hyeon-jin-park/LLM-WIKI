@@ -45,3 +45,6 @@ node_modules/
 dist/
 
 archive3/
+
+# Local submission staging folder. Do not publish this wrapper directory.
+final_submit/
