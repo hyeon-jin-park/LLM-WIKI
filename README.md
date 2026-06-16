@@ -13,7 +13,7 @@ API Key를 코드에 넣지 않습니다. 자료 저장, 초안 생성, Wiki 반
 | 요구 항목 | 이 Repository의 대응 파일 |
 | --- | --- |
 | 하네스 | `AGENTS.md`, `RULES.md`, `skills/wiki-curator/SKILL.md` |
-| Agent 운영지침 및 추가 컨텍스트 | `AGENTS.md`, `RULES.md`, `PRD.md`, `DOMAIN.md`, `JOURNAL.md` |
+| Agent 운영지침 및 추가 컨텍스트 | `AGENTS.md`, `RULES.md`, `PRD.md`, `DOMAIN.md` |
 | SKILL 또는 Subagent/Hook 1개 이상 | `skills/wiki-curator/` |
 | LLM Wiki 구조 | `raw/`, `wiki/`, `schema/` |
 | Wiki Viewer | `app/` |
