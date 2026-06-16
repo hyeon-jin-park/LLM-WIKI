@@ -19,6 +19,22 @@ class CLIAgentTest(unittest.TestCase):
             return {"ok": True, "page_count": 1, "raw_count": 0, "issues": []}
         raise AssertionError(name)
 
+    def preserving_call_tool(self, name, arguments=None):
+        if name == "list_pages":
+            return [{"path": "wiki/notes/raw.md", "title": "Raw Notes", "meta": {"type": "note"}}]
+        if name == "search_wiki":
+            return [{"path": "wiki/notes/raw.md", "title": "Raw Notes", "preview": "A long original page"}]
+        if name == "page_summary":
+            return {"path": "wiki/notes/raw.md", "title": "Raw Notes", "summary": "A long original page.", "key_points": "- First claim", "meta": {"type": "note"}}
+        if name == "read_page":
+            return {
+                "path": "wiki/notes/raw.md",
+                "title": "Raw Notes",
+                "meta": {"type": "note"},
+                "content": "---\ntype: note\nstatus: draft\ntags: raw\nlast_verified: 2026-06-16\nsource_url: local://raw/processed/raw.txt\nraw_source: raw/processed/raw.txt\n---\n# Raw Notes\n\n## Summary\n\nThis paragraph must stay intact because decorating is not summarizing.\n\n## Key Points\n\n\uf06f First private-use bullet must become readable but remain present.\n\n> Quoted evidence must stay visible.\n\nLong original paragraph with implementation detail A, implementation detail B, and implementation detail C must not disappear.\n\n## Source\n\n- `raw/processed/raw.txt`\n",
+            }
+        raise AssertionError(name)
+
     @patch("src.cli_agent.shutil.which", return_value=None)
     def test_status_without_codex(self, _which):
         status = agent_status()
@@ -34,6 +50,18 @@ class CLIAgentTest(unittest.TestCase):
         self.assertEqual(result["engine"], "local-mcp")
         self.assertEqual(result["action"]["type"], "apply_edit_suggestion")
         self.assertIn("## Summary", result["action"]["content"])
+
+    @patch("src.cli_agent.shutil.which", return_value=None)
+    def test_local_polish_preserves_existing_content(self, _which):
+        original = self.preserving_call_tool("read_page")["content"]
+        result = answer_with_codex(self.preserving_call_tool, "현재 페이지 보기 좋게 꾸며줘", "wiki/notes/raw.md")
+        content = result["action"]["content"]
+        self.assertIn("This paragraph must stay intact", content)
+        self.assertIn("First private-use bullet must become readable but remain present", content)
+        self.assertIn("> Quoted evidence must stay visible.", content)
+        self.assertIn("implementation detail A", content)
+        self.assertIn("## Maintenance Notes", content)
+        self.assertGreater(len(content), int(len(original) * 0.9))
 
     @patch("src.cli_agent.subprocess.run")
     @patch("src.cli_agent.shutil.which", return_value="/usr/local/bin/codex")

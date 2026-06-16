@@ -83,51 +83,56 @@ def _section(body: str, heading: str) -> str:
     return match.group(1).strip() if match else ""
 
 
+def _normalize_markdown_body(body: str) -> str:
+    text = body.replace("\r\n", "\n").replace("\r", "\n")
+    lines: list[str] = []
+    for line in text.split("\n"):
+        stripped_right = line.rstrip()
+        stripped = stripped_right.lstrip()
+        indent = stripped_right[: len(stripped_right) - len(stripped)]
+        bullet_match = re.match(r"^[\uf06f•●▪◦○]\s*(.+)$", stripped)
+        if bullet_match:
+            lines.append(f"{indent}- {bullet_match.group(1).strip()}")
+            continue
+        numbered_bullet = re.match(r"^([0-9]+)[.)]\s+(.+)$", stripped)
+        if numbered_bullet and not stripped.startswith(tuple(f"{i}." for i in range(1, 10))):
+            lines.append(f"{indent}{numbered_bullet.group(1)}. {numbered_bullet.group(2).strip()}")
+            continue
+        lines.append(stripped_right)
+
+    normalized = "\n".join(lines)
+    normalized = re.sub(r"\n{3,}", "\n\n", normalized)
+    normalized = re.sub(r"\n(#{1,6}\s+)", r"\n\n\1", normalized)
+    normalized = re.sub(r"(#{1,6}\s+[^\n]+)\n(?!\n)", r"\1\n\n", normalized)
+    return normalized.strip()
+
+
+def _ensure_title(body: str) -> str:
+    if re.search(r"^#\s+.+$", body, re.MULTILINE):
+        return body
+    return "# Wiki Page\n\n" + body.strip()
+
+
+def _ensure_required_sections(body: str) -> str:
+    required = {
+        "## Summary": "이 페이지의 핵심 맥락을 짧게 적어 두세요.",
+        "## Key Points": "- 원본에서 확인한 주요 내용을 유지하세요.",
+        "## Source": "- 원본 자료를 확인하세요.",
+        "## Related Pages": "",
+        "## User Questions": "- 이 자료를 보고 어떤 질문에 답할 수 있나요?",
+        "## Maintenance Notes": "- 원본과 대조해 날짜, 이름, 수치, 고유명사를 확인하세요.",
+    }
+    output = body.rstrip()
+    for heading, placeholder in required.items():
+        if re.search(rf"^{re.escape(heading)}\s*$", output, re.MULTILINE):
+            continue
+        output += f"\n\n{heading}\n\n{placeholder}".rstrip()
+    return output
+
+
 def _polish_markdown(content: str) -> str:
     frontmatter, body = _split_frontmatter(content)
-    title_match = re.search(r"^#\s+(.+)$", body, re.MULTILINE)
-    title = title_match.group(1).strip() if title_match else "Wiki Page"
-    summary = _section(body, "## Summary")
-    key_points = _section(body, "## Key Points")
-    source = _section(body, "## Source")
-    related = _section(body, "## Related Pages")
-    questions = _section(body, "## User Questions")
-    notes = _section(body, "## Maintenance Notes")
-
-    bullets = []
-    for line in key_points.splitlines():
-        cleaned = line.strip()
-        if cleaned.startswith(("-", "*")):
-            bullets.append("- " + cleaned[1:].strip())
-    if not bullets and summary:
-        bullets = ["- 핵심 내용을 한 문장씩 다시 정리하세요.", "- 원본에서 확인 가능한 사실만 남기세요."]
-
-    polished = f"""# {title}
-
-## Summary
-
-{summary or "이 페이지는 원본 자료에서 추출한 핵심 내용을 정리하기 위한 Wiki 문서입니다."}
-
-## Key Points
-
-{chr(10).join(bullets[:8])}
-
-## Source
-
-{source or "- 원본 자료를 확인하세요."}
-
-## Related Pages
-
-{related}
-
-## User Questions
-
-{questions or "- 이 자료에서 가장 먼저 확인해야 할 내용은 무엇인가요?\n- 이후에 연결할 관련 문서는 무엇인가요?"}
-
-## Maintenance Notes
-
-{notes or "- 원본과 대조해 날짜, 이름, 수치, 고유명사를 확인하세요.\n- 필요한 경우 관련 페이지 링크를 추가하세요."}
-"""
+    polished = _ensure_required_sections(_ensure_title(_normalize_markdown_body(body)))
     return (frontmatter + polished).rstrip() + "\n"
 
 
@@ -173,7 +178,7 @@ def _local_answer(call_tool: ToolCaller, query: str, page_path: str = "") -> dic
         calls.append({"tool": "read_page", "arguments": {"path": page_path.removeprefix("wiki/")}})
         suggestion = _polish_markdown(page["content"])
         return {
-            "answer": "현재 페이지를 더 읽기 쉬운 Markdown 구조로 다듬은 제안을 만들었습니다.\n\n바로 저장하지는 않았습니다. 아래 **편집기에 적용**을 누르면 편집 화면에 들어가고, 내용을 확인한 뒤 `저장 및 검증`을 누르면 반영됩니다.",
+            "answer": "현재 페이지를 **요약하지 않고**, 원문을 보존하는 방식으로 보기 좋게 다듬은 제안을 만들었습니다.\n\n공백, bullet, heading, 필수 섹션만 정리했고 바로 저장하지는 않았습니다. 아래 **편집기에 적용**을 누르면 편집 화면에 들어가고, 내용을 확인한 뒤 `저장 및 검증`을 누르면 반영됩니다.",
             "sources": [{"title": page["title"], "path": page["path"]}],
             "tool_calls": calls,
             "engine": "local-mcp",
