@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>LLM WIKI</title>
-  <link rel="stylesheet" href="/styles.css?v=5">
+  <link rel="stylesheet" href="/styles.css?v=6">
 </head>
 <body>
   <header class="topbar">
@@ -49,7 +49,7 @@
       <div id="toolsView" class="panel-view tools-view">
         <section class="tool-summary"><div><span>Pages</span><strong id="toolPages">0</strong></div><div><span>Raw</span><strong id="toolRaw">0</strong></div><div><span>Tools</span><strong id="toolTotal">12</strong></div></section>
         <section class="tool-actions"><button id="relatedBtn" type="button"><span>↗</span><div><strong>관련 페이지</strong><small>suggest_links</small></div></button><button id="sourceBtn" type="button"><span>⌁</span><div><strong>출처 추적</strong><small>source_trace</small></div></button><button id="toolValidateBtn" type="button"><span>✓</span><div><strong>Wiki 검증</strong><small>validate_wiki</small></div></button></section>
-        <section class="tool-output"><div class="output-head"><strong>Tool output</strong><button id="clearOutputBtn" type="button">지우기</button></div><div id="toolOutput" class="output-body"><div class="output-empty">페이지를 선택하거나 Tool을 실행하면 결과가 표시됩니다.</div></div></section>
+        <section class="tool-output"><div class="output-head"><strong>작업 결과</strong><button id="clearOutputBtn" type="button">지우기</button></div><div id="toolOutput" class="output-body"><div class="output-empty">페이지를 선택하거나 Tool을 실행하면 결과가 표시됩니다.</div></div></section>
         <section class="activity"><div><strong>MCP activity</strong><span id="callCount">0 calls</span></div><code id="activityLog">waiting for a tool call</code></section>
         <div class="tool-note"><strong>Agent-ready</strong><p>외부 Agent는 동일한 stdio MCP 서버를 사용해 이 Wiki를 읽고 유지보수할 수 있습니다.</p></div>
       </div>
@@ -82,6 +82,6 @@
     </section>
   </div>
   <div id="toast" class="toast" hidden></div>
-  <script type="module" src="/app.js?v=5"></script>
+  <script type="module" src="/app.js?v=6"></script>
 </body>
 </html>
