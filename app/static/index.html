@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>LLM WIKI</title>
+  <link rel="stylesheet" href="/styles.css?v=3">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">L</span><div><strong>LLM WIKI</strong><small>Build your own knowledge base</small></div></div>
+    <div class="workspace-title"><span class="status-dot"></span><strong id="workspaceTitle">Empty workspace</strong><span id="workspaceMeta">0 pages</span></div>
+    <div class="top-actions"><button id="validateBtn" class="secondary-btn" type="button">검증</button><button id="openImportBtn" class="primary-btn" type="button">＋ 자료 추가</button><span id="protocolBadge" class="protocol">MCP</span></div>
+  </header>
+
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar-head"><h1>Knowledge</h1><p>Markdown pages in <code>wiki/</code></p></div>
+      <label class="search-box"><span>⌕</span><input id="searchInput" type="search" placeholder="제목, 내용, 태그 검색"></label>
+      <div class="collection-head"><span>WIKI PAGES</span><span id="pageCount">0</span></div>
+      <nav id="pageList" class="page-list" aria-label="Wiki pages"></nav>
+      <div class="sidebar-footer"><span id="validationState">검증 중</span><span id="rawCount">raw 0</span></div>
+    </aside>
+
+    <main class="main-panel">
+      <section id="emptyView" class="empty-view">
+        <div class="empty-icon"><span></span><span></span><span></span></div>
+        <p class="eyebrow">EMPTY MARKDOWN WIKI</p>
+        <h1>첫 자료로 Wiki를 시작하세요</h1>
+        <p class="empty-copy">TXT, Markdown 또는 PDF를 넣으면 Schema에 맞는 초안을 만듭니다. 내용을 검토하고 승인하기 전에는 Wiki가 변경되지 않습니다.</p>
+        <button id="emptyImportBtn" class="primary-btn large" type="button">첫 자료 추가</button>
+        <div class="flow-strip">
+          <div><b>1</b><span>원본 저장</span><small>raw/inbox</small></div><i>→</i>
+          <div><b>2</b><span>초안 검토</span><small>human approval</small></div><i>→</i>
+          <div><b>3</b><span>Wiki 게시</span><small>validate + trace</small></div>
+        </div>
+      </section>
+
+      <section id="readerView" class="reader-view" hidden>
+        <header class="reader-toolbar"><div><p id="pageType" class="eyebrow">WIKI PAGE</p><h1 id="pageTitle"></h1><p id="pagePath" class="path"></p></div><div><button id="traceBtn" class="secondary-btn" type="button">출처</button><button id="editBtn" class="secondary-btn" type="button">편집</button></div></header>
+        <div id="lineageBar" class="lineage-bar" hidden></div>
+        <article id="markdownView" class="markdown"></article>
+        <section id="editor" class="editor" hidden><textarea id="editorContent" spellcheck="false"></textarea><div><span>저장 후 Wiki 전체를 다시 검증합니다.</span><button id="cancelEditBtn" class="secondary-btn" type="button">취소</button><button id="saveBtn" class="primary-btn" type="button">저장 및 검증</button></div></section>
+      </section>
+    </main>
+
+    <aside class="tool-panel">
+      <div class="tool-head"><div><p class="eyebrow">MCP WORKSPACE</p><h2 id="panelTitle">Wiki tools</h2><span id="serverState" class="server-state">연결 중</span></div><div class="panel-tabs"><button class="active" data-panel="tools" type="button">Tools</button><button data-panel="chat" type="button">Chat</button></div></div>
+      <div id="toolsView" class="panel-view tools-view">
+        <section class="tool-summary"><div><span>Pages</span><strong id="toolPages">0</strong></div><div><span>Raw</span><strong id="toolRaw">0</strong></div><div><span>Tools</span><strong id="toolTotal">12</strong></div></section>
+        <section class="tool-actions"><button id="relatedBtn" type="button"><span>↗</span><div><strong>관련 페이지</strong><small>suggest_links</small></div></button><button id="sourceBtn" type="button"><span>⌁</span><div><strong>출처 추적</strong><small>source_trace</small></div></button><button id="toolValidateBtn" type="button"><span>✓</span><div><strong>Wiki 검증</strong><small>validate_wiki</small></div></button></section>
+        <section class="tool-output"><div class="output-head"><strong>Tool output</strong><button id="clearOutputBtn" type="button">지우기</button></div><div id="toolOutput" class="output-body"><div class="output-empty">페이지를 선택하거나 Tool을 실행하면 결과가 표시됩니다.</div></div></section>
+        <section class="activity"><div><strong>MCP activity</strong><span id="callCount">0 calls</span></div><code id="activityLog">waiting for a tool call</code></section>
+        <div class="tool-note"><strong>Agent-ready</strong><p>외부 Agent는 동일한 stdio MCP 서버를 사용해 이 Wiki를 읽고 유지보수할 수 있습니다.</p></div>
+      </div>
+      <div id="chatView" class="panel-view chat-view" hidden>
+        <div id="chatStatus" class="chat-status"><span class="chat-dot"></span><div><strong>Codex CLI 확인 중</strong><p>Wiki를 읽기 전용으로 탐색합니다.</p></div></div>
+        <div id="chatMessages" class="chat-messages" aria-live="polite"><div class="chat-message assistant"><span>LLM WIKI ASSISTANT</span><p>현재 Wiki에 대해 질문할 수 있습니다. 페이지가 비어 있다면 사용 방법을 안내해 드립니다.</p></div></div>
+        <div class="chat-context"><span>CONTEXT</span><strong id="chatContext">전체 Wiki · 0 pages</strong></div>
+        <form id="chatForm" class="chat-form"><label for="chatInput">Wiki에 질문</label><div><textarea id="chatInput" rows="3" placeholder="예: 이 Wiki에는 어떤 정보가 있어?"></textarea><button id="chatSendBtn" type="submit" title="질문 전송">↑</button></div><small>답변은 읽기 전용입니다. 작성과 수정은 승인 화면을 사용합니다.</small></form>
+      </div>
+    </aside>
+  </div>
+
+  <div id="importModal" class="modal-backdrop" hidden>
+    <section class="import-modal" role="dialog" aria-modal="true" aria-labelledby="importTitle">
+      <header class="modal-header"><div><p class="eyebrow">RAW TO WIKI</p><h2 id="importTitle">자료 추가</h2></div><button id="closeImportBtn" class="icon-btn" type="button" aria-label="닫기">×</button></header>
+      <div class="stepper"><div class="active" data-step-label="1"><b>1</b><span>자료 선택</span></div><div data-step-label="2"><b>2</b><span>초안 검토</span></div><div data-step-label="3"><b>3</b><span>완료</span></div></div>
+      <div id="importStep1" class="modal-step">
+        <label class="file-drop"><span class="file-icon">＋</span><strong>MD, TXT 또는 PDF 선택</strong><small>최대 10 MB · 파일은 로컬에서만 처리됩니다.</small><input id="rawFile" type="file" accept=".md,.txt,.pdf"></label>
+        <div class="form-grid"><label>페이지 유형<select id="importType"><option value="note">Note</option><option value="concept">Concept</option><option value="guide">Guide</option><option value="reference">Reference</option><option value="project">Project</option><option value="journal">Journal</option></select></label><label>제목<input id="importTitleInput" placeholder="비워두면 파일명 사용"></label><label class="wide">태그<input id="importTags" value="imported" placeholder="research, personal"></label></div>
+        <div class="modal-actions"><span id="uploadHint">초안 단계에서는 Wiki를 변경하지 않습니다.</span><button id="draftImportBtn" class="primary-btn" type="button">초안 만들기</button></div>
+      </div>
+      <div id="importStep2" class="modal-step" hidden>
+        <div class="draft-meta"><label>저장 경로<input id="importPath"></label><div><span>원본</span><strong id="importSource"></strong></div></div>
+        <label class="editor-label">Markdown 초안<textarea id="importContent" spellcheck="false"></textarea></label>
+        <div class="approval-note"><strong>사람의 승인 필요</strong><span>내용과 출처를 확인한 뒤 게시하세요.</span></div>
+        <div class="modal-actions"><button id="backImportBtn" class="secondary-btn" type="button">이전</button><button id="publishImportBtn" class="primary-btn" type="button">승인하고 Wiki에 저장</button></div>
+      </div>
+      <div id="importStep3" class="modal-step complete-step" hidden><div class="complete-mark">✓</div><h3>첫 Wiki 페이지가 준비됐습니다</h3><p id="completionText"></p><div id="tracePreview" class="trace-preview"></div><div class="modal-actions centered"><button id="finishImportBtn" class="secondary-btn" type="button">닫기</button><button id="openImportedPageBtn" class="primary-btn" type="button">페이지 열기</button></div></div>
+    </section>
+  </div>
+  <div id="toast" class="toast" hidden></div>
+  <script type="module" src="/app.js?v=3"></script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm-wiki.local/schema/wiki-page.schema.json",
+  "title": "LLM WIKI page frontmatter",
+  "type": "object",
+  "required": ["type", "status", "tags", "last_verified", "source_url"],
+  "properties": {
+    "type": {"enum": ["note", "concept", "guide", "reference", "project", "journal"]},
+    "status": {"type": "string", "minLength": 1},
+    "tags": {"type": "string", "minLength": 1},
+    "last_verified": {"type": "string", "format": "date"},
+    "source_url": {"type": "string", "pattern": "^(https://|local://raw/processed/|local://user-created)"},
+    "raw_source": {"type": "string", "pattern": "^raw/processed/"}
+  },
+  "additionalProperties": true
+}

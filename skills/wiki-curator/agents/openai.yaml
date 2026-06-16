@@ -1,0 +1,4 @@
+interface:
+  display_name: "Wiki Curator"
+  short_description: "Import, review, link, and validate Markdown knowledge"
+  default_prompt: "Use $wiki-curator to turn this source into a reviewed Wiki page."

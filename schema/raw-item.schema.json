@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm-wiki.local/schema/raw-item.schema.json",
+  "title": "Raw knowledge material",
+  "type": "object",
+  "required": ["path", "name", "format", "status"],
+  "properties": {
+    "path": {"type": "string", "pattern": "^raw/(inbox|processed)/"},
+    "name": {"type": "string", "minLength": 1},
+    "format": {"enum": ["md", "txt", "pdf"]},
+    "status": {"enum": ["pending", "processed"]},
+    "wiki_pages": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": true
+}
