@@ -12,6 +12,13 @@ sys.path.insert(0, str(ROOT))
 from src.wiki_tool import TOOLS
 
 
+def configure_stdio() -> None:
+    for stream_name in ("stdin", "stdout", "stderr"):
+        stream = getattr(sys, stream_name)
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+
 def tool(name: str, title: str, description: str, properties: dict[str, Any] | None = None, required: list[str] | None = None, write: bool = False) -> dict[str, Any]:
     return {
         "name": name, "title": title, "description": description,
@@ -65,6 +72,7 @@ def dispatch(message: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def main() -> None:
+    configure_stdio()
     for line in sys.stdin:
         if not line.strip(): continue
         try:
@@ -72,7 +80,7 @@ def main() -> None:
         except Exception as exc:
             output = response(None, error={"code": -32603, "message": str(exc)})
         if output is not None:
-            print(json.dumps(output, ensure_ascii=False), flush=True)
+            print(json.dumps(output, ensure_ascii=True), flush=True)
 
 
 if __name__ == "__main__":

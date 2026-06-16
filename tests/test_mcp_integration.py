@@ -1,4 +1,5 @@
 import unittest
+import base64
 
 from src.mcp_client import MCPClient
 
@@ -29,6 +30,18 @@ class MCPIntegrationTest(unittest.TestCase):
         self.client._process.wait(timeout=5)
         names = [item["name"] for item in self.client.list_tools()]
         self.assertIn("draft_page_from_raw", names)
+
+    def test_stdio_handles_pdf_private_use_unicode(self):
+        payload = base64.b64encode("PDF bullet \uf06f survives stdio.".encode("utf-8")).decode()
+        stored = self.client.call_tool("store_raw_item", {"filename": "unicode-stdio-test.txt", "content_base64": payload})
+        try:
+            draft = self.client.call_tool("draft_page_from_raw", {"path": stored["path"], "page_type": "note", "title": "Unicode Stdio Test"})
+            self.assertIn("\uf06f", draft["content"])
+        finally:
+            from pathlib import Path
+            target = Path(stored["path"])
+            if target.exists():
+                target.unlink()
 
 
 if __name__ == "__main__": unittest.main()

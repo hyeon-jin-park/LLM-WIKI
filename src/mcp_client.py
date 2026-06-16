@@ -28,11 +28,11 @@ class MCPClient:
 
     def _start_process(self) -> None:
         self._close_process_pipes()
-        env = {**os.environ, "PYTHONUNBUFFERED": "1"}
+        env = {**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"}
         self._process = subprocess.Popen(
             [sys.executable, str(ROOT / "tools" / "mcp_server.py")], cwd=ROOT,
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True, bufsize=1, env=env,
+            text=True, encoding="utf-8", errors="replace", bufsize=1, env=env,
         )
         self._stderr_thread = threading.Thread(target=self._drain_stderr, daemon=True)
         self._stderr_thread.start()
@@ -77,7 +77,7 @@ class MCPClient:
         process = self._process
         assert process and process.stdin and process.stdout
         try:
-            process.stdin.write(json.dumps(message, ensure_ascii=False) + "\n")
+            process.stdin.write(json.dumps(message, ensure_ascii=True) + "\n")
             process.stdin.flush()
             line = process.stdout.readline()
         except BrokenPipeError as exc:
@@ -97,7 +97,7 @@ class MCPClient:
         self._ensure_process()
         assert self._process and self._process.stdin
         try:
-            self._process.stdin.write(json.dumps({"jsonrpc": "2.0", "method": method, "params": {}}) + "\n")
+            self._process.stdin.write(json.dumps({"jsonrpc": "2.0", "method": method, "params": {}}, ensure_ascii=True) + "\n")
             self._process.stdin.flush()
         except BrokenPipeError as exc:
             raise RuntimeError(self._diagnostics()) from exc
