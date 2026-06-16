@@ -15,8 +15,19 @@ class CLIAgentTest(unittest.TestCase):
             return {"path": "wiki/concepts/context.md", "title": "Context", "summary": "A bounded working context.", "key_points": "- Preserve relevant knowledge.", "meta": {"type": "concept"}}
         if name == "read_page":
             return {"path": "wiki/concepts/context.md", "title": "Context", "meta": {"type": "concept"}, "content": "---\ntype: concept\nstatus: draft\ntags: test\nlast_verified: 2026-06-16\nsource_url: local://user-created\n---\n# Context\n\n## Summary\n\nA bounded working context.\n\n## Key Points\n\n- Preserve relevant knowledge.\n\n## Source\n\n- test\n\n## Related Pages\n\n## User Questions\n\n## Maintenance Notes\n\n"}
+        if name == "suggest_links":
+            return [{"path": "wiki/concepts/linked.md", "title": "Linked Page", "score": 3, "preview": "Related"}]
         if name == "validate_wiki":
             return {"ok": True, "page_count": 1, "raw_count": 0, "issues": []}
+        raise AssertionError(name)
+
+    def raw_call_tool(self, name, arguments=None):
+        if name == "list_pages":
+            return []
+        if name == "list_raw_items":
+            return [{"path": "raw/inbox/source.txt", "name": "source.txt", "format": "txt", "status": "pending", "bytes": 120, "wiki_pages": []}]
+        if name == "draft_page_from_raw":
+            return {"suggested_path": "notes/source.md", "raw": {"path": "raw/inbox/source.txt"}, "content": "---\ntype: note\nstatus: draft\n---\n# Source\n\n## Summary\n\n- Scope: Source text\n"}
         raise AssertionError(name)
 
     def preserving_call_tool(self, name, arguments=None):
@@ -62,6 +73,20 @@ class CLIAgentTest(unittest.TestCase):
         self.assertIn("implementation detail A", content)
         self.assertIn("## Maintenance Notes", content)
         self.assertGreater(len(content), int(len(original) * 0.9))
+
+    @patch("src.cli_agent.shutil.which", return_value=None)
+    def test_local_agent_can_prepare_raw_draft(self, _which):
+        result = answer_with_codex(self.raw_call_tool, "저장된 자료로 Wiki 초안 만들어줘")
+        self.assertEqual(result["engine"], "local-mcp")
+        self.assertEqual(result["action"]["type"], "apply_import_draft")
+        self.assertEqual(result["action"]["path"], "notes/source.md")
+
+    @patch("src.cli_agent.shutil.which", return_value=None)
+    def test_local_agent_can_prepare_related_link_edit(self, _which):
+        result = answer_with_codex(self.call_tool, "현재 페이지에 관련 링크 추가해줘", "wiki/concepts/context.md")
+        self.assertEqual(result["engine"], "local-mcp")
+        self.assertEqual(result["action"]["type"], "apply_edit_suggestion")
+        self.assertIn("[Linked Page](linked.md)", result["action"]["content"])
 
     @patch("src.cli_agent.subprocess.run")
     @patch("src.cli_agent.shutil.which", return_value="/usr/local/bin/codex")

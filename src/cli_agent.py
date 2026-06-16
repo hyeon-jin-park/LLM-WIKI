@@ -7,6 +7,7 @@ still handles common Wiki operations and returns approval-gated edit drafts.
 from __future__ import annotations
 
 import json
+import posixpath
 import shutil
 import subprocess
 import re
@@ -136,9 +137,94 @@ def _polish_markdown(content: str) -> str:
     return (frontmatter + polished).rstrip() + "\n"
 
 
+def _pick_page_type(query: str) -> str:
+    lower = query.casefold()
+    for page_type in ("concept", "guide", "reference", "project", "journal", "note"):
+        if page_type in lower:
+            return page_type
+    if "개념" in lower:
+        return "concept"
+    if "가이드" in lower or "방법" in lower:
+        return "guide"
+    if "참고" in lower or "레퍼런스" in lower:
+        return "reference"
+    if "프로젝트" in lower:
+        return "project"
+    if "기록" in lower or "저널" in lower:
+        return "journal"
+    return "note"
+
+
+def _relative_wiki_link(from_path: str, to_path: str) -> str:
+    source_dir = posixpath.dirname(from_path.removeprefix("wiki/")) or "."
+    target = to_path.removeprefix("wiki/")
+    return posixpath.relpath(target, source_dir)
+
+
+def _insert_related_links(content: str, page_path: str, links: list[dict[str, Any]]) -> str:
+    frontmatter, body = _split_frontmatter(content)
+    body = _ensure_required_sections(_ensure_title(_normalize_markdown_body(body)))
+    link_lines = [f"- [{item['title']}]({_relative_wiki_link(page_path, item['path'])})" for item in links]
+    related = _section(body, "## Related Pages")
+    existing = {line.strip() for line in related.splitlines() if line.strip()}
+    merged = related.rstrip()
+    for line in link_lines:
+        if line not in existing:
+            merged += ("\n" if merged else "") + line
+    replacement = f"## Related Pages\n\n{merged.strip()}".rstrip()
+    updated = re.sub(r"^## Related Pages\s*$[\s\S]*?(?=^##\s+|\Z)", replacement + "\n\n", body, count=1, flags=re.MULTILINE)
+    return (frontmatter + updated).rstrip() + "\n"
+
+
 def _local_answer(call_tool: ToolCaller, query: str, page_path: str = "") -> dict[str, Any]:
     evidence, sources, calls = _collect_context(call_tool, query, page_path)
     lower = query.casefold()
+
+    wants_draft = any(word in lower for word in ("초안", "draft", "페이지 만들어", "정리해줘", "wiki로")) and any(word in lower for word in ("원본", "자료", "raw", "파일"))
+
+    if any(word in lower for word in ("원본 목록", "자료 목록", "raw 목록", "inbox", "저장된 자료")) and not wants_draft:
+        raw_items = call_tool("list_raw_items", {})
+        calls.append({"tool": "list_raw_items", "arguments": {}})
+        if not raw_items:
+            answer = "아직 저장된 원본 자료가 없습니다. `+ 자료 추가`로 파일을 넣으면 제가 초안 생성까지 이어서 도와줄 수 있습니다."
+        else:
+            lines = ["저장된 원본 자료입니다."]
+            for item in raw_items[:8]:
+                pages = item.get("wiki_pages") or []
+                linked = f" → {', '.join(pages)}" if pages else ""
+                lines.append(f"- {item['name']} · {item['status']} · `{item['path']}`{linked}")
+            answer = "\n".join(lines)
+        return {"answer": answer, "sources": sources, "tool_calls": calls, "engine": "local-mcp", "read_only": True}
+
+    if wants_draft:
+        raw_items = call_tool("list_raw_items", {})
+        calls.append({"tool": "list_raw_items", "arguments": {}})
+        candidates = [item for item in raw_items if item.get("status") == "pending"] or raw_items
+        if not candidates:
+            return {
+                "answer": "초안을 만들 원본 자료가 없습니다. 먼저 `+ 자료 추가`로 파일을 저장해 주세요.",
+                "sources": sources,
+                "tool_calls": calls,
+                "engine": "local-mcp",
+                "read_only": True,
+            }
+        raw = candidates[0]
+        draft = call_tool("draft_page_from_raw", {"path": raw["path"], "page_type": _pick_page_type(query), "title": "", "tags": "imported"})
+        calls.append({"tool": "draft_page_from_raw", "arguments": {"path": raw["path"], "page_type": _pick_page_type(query), "title": "", "tags": "imported"}})
+        return {
+            "answer": f"`{raw['name']}`로 Wiki 초안을 준비했습니다.\n\n아래 **초안 열기**를 누르면 자료 추가 화면의 검토 단계로 이동합니다. 아직 저장하지 않았고, 내용을 확인한 뒤 `승인하고 Wiki에 저장`을 눌러야 반영됩니다.",
+            "sources": [],
+            "tool_calls": calls,
+            "engine": "local-mcp",
+            "read_only": True,
+            "action": {
+                "type": "apply_import_draft",
+                "label": "초안 열기",
+                "path": draft["suggested_path"],
+                "raw_path": draft["raw"]["path"],
+                "content": draft["content"],
+            },
+        }
 
     if any(word in lower for word in ("검증", "validate", "검사")):
         validation = call_tool("validate_wiki", {})
@@ -163,6 +249,30 @@ def _local_answer(call_tool: ToolCaller, query: str, page_path: str = "") -> dic
             "engine": "local-mcp",
             "read_only": True,
         }
+
+    if any(word in lower for word in ("링크 추가", "링크 넣", "관련 링크", "연결해", "link add")) and page_path:
+        links = call_tool("suggest_links", {"path": page_path.removeprefix("wiki/"), "limit": 6})
+        calls.append({"tool": "suggest_links", "arguments": {"path": page_path.removeprefix("wiki/"), "limit": 6}})
+        if not links:
+            return {"answer": "현재 페이지에 넣을 만한 관련 링크를 찾지 못했습니다. Wiki 페이지가 더 쌓이면 자동 연결이 더 좋아집니다.", "sources": sources, "tool_calls": calls, "engine": "local-mcp", "read_only": True}
+        page = call_tool("read_page", {"path": page_path.removeprefix("wiki/")})
+        calls.append({"tool": "read_page", "arguments": {"path": page_path.removeprefix("wiki/")}})
+        suggestion = _insert_related_links(page["content"], page["path"], links)
+        answer = "관련 페이지 후보를 `Related Pages` 섹션에 넣은 편집안을 만들었습니다.\n\n" + "\n".join(f"- {item['title']}" for item in links)
+        return {
+            "answer": answer + "\n\n아래 버튼으로 편집기에 적용한 뒤 저장 여부를 결정하세요.",
+            "sources": [{"title": item["title"], "path": item["path"]} for item in links],
+            "tool_calls": calls,
+            "engine": "local-mcp",
+            "read_only": True,
+            "action": {"type": "apply_edit_suggestion", "label": "링크안 적용", "path": page["path"], "content": suggestion},
+        }
+
+    if any(word in lower for word in ("요약", "핵심", "summary", "brief")) and page_path:
+        summary = call_tool("page_summary", {"path": page_path.removeprefix("wiki/")})
+        calls.append({"tool": "page_summary", "arguments": {"path": page_path.removeprefix("wiki/")}})
+        answer = f"**{summary['title']}**\n\n{summary.get('summary') or 'Summary가 비어 있습니다.'}\n\n**Key Points**\n{summary.get('key_points') or '- 핵심 포인트가 비어 있습니다.'}"
+        return {"answer": answer, "sources": [{"title": summary["title"], "path": summary["path"]}], "tool_calls": calls, "engine": "local-mcp", "read_only": True}
 
     if any(word in lower for word in ("관련", "link", "연결")) and page_path:
         links = call_tool("suggest_links", {"path": page_path.removeprefix("wiki/"), "limit": 6})
@@ -206,7 +316,8 @@ def _is_tool_command(query: str) -> bool:
     lower = query.casefold()
     return any(word in lower for word in (
         "검증", "validate", "검사", "출처", "source", "trace", "관련", "link", "연결",
-        "꾸며", "정리", "다듬", "보기 좋", "format", "polish",
+        "꾸며", "정리", "다듬", "보기 좋", "format", "polish", "초안", "draft",
+        "원본", "자료 목록", "raw", "inbox", "요약", "핵심",
     ))
 
 
