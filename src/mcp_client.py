@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import threading
@@ -18,43 +19,99 @@ class MCPClient:
         self._lock = threading.Lock()
         self._next_id = 1
         self._history: list[dict[str, Any]] = []
+        self._stderr_tail: list[str] = []
+        self._stderr_thread: threading.Thread | None = None
+        self._process: subprocess.Popen[str] | None = None
+        self._start_process()
+        with self._lock:
+            self.server_info = self._initialize_unlocked()
+
+    def _start_process(self) -> None:
+        self._close_process_pipes()
+        env = {**os.environ, "PYTHONUNBUFFERED": "1"}
         self._process = subprocess.Popen(
-            [sys.executable, "tools/mcp_server.py"], cwd=ROOT,
+            [sys.executable, str(ROOT / "tools" / "mcp_server.py")], cwd=ROOT,
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True, bufsize=1,
+            text=True, bufsize=1, env=env,
         )
-        self.server_info = self._initialize()
+        self._stderr_thread = threading.Thread(target=self._drain_stderr, daemon=True)
+        self._stderr_thread.start()
+
+    def _close_process_pipes(self) -> None:
+        process = self._process
+        if not process:
+            return
+        for stream in (process.stdin, process.stdout, process.stderr):
+            if stream and not stream.closed:
+                try:
+                    stream.close()
+                except OSError:
+                    pass
+
+    def _drain_stderr(self) -> None:
+        process = self._process
+        if not process or not process.stderr:
+            return
+        for line in process.stderr:
+            self._stderr_tail.append(line.rstrip())
+            self._stderr_tail = self._stderr_tail[-20:]
+
+    def _diagnostics(self) -> str:
+        process = self._process
+        code = None if process is None else process.poll()
+        details = f"MCP server process exited with code {code}."
+        if self._stderr_tail:
+            details += " stderr: " + " | ".join(self._stderr_tail[-5:])
+        return details
+
+    def _ensure_process(self) -> None:
+        if self._process is None or self._process.poll() is not None:
+            self._start_process()
+            self.server_info = self._initialize_unlocked()
+
+    def _request_unlocked(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        self._ensure_process()
+        request_id = self._next_id
+        self._next_id += 1
+        message = {"jsonrpc": "2.0", "id": request_id, "method": method, "params": params or {}}
+        process = self._process
+        assert process and process.stdin and process.stdout
+        try:
+            process.stdin.write(json.dumps(message, ensure_ascii=False) + "\n")
+            process.stdin.flush()
+            line = process.stdout.readline()
+        except BrokenPipeError as exc:
+            raise RuntimeError(self._diagnostics()) from exc
+        if not line:
+            raise RuntimeError(self._diagnostics())
+        response = json.loads(line)
+        if "error" in response:
+            raise RuntimeError(response["error"]["message"])
+        return response["result"]
 
     def _request(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         with self._lock:
-            if self._process.poll() is not None:
-                raise RuntimeError("MCP server process is not running")
-            request_id = self._next_id
-            self._next_id += 1
-            message = {"jsonrpc": "2.0", "id": request_id, "method": method, "params": params or {}}
-            assert self._process.stdin and self._process.stdout
-            self._process.stdin.write(json.dumps(message, ensure_ascii=False) + "\n")
+            return self._request_unlocked(method, params)
+
+    def _notify_unlocked(self, method: str) -> None:
+        self._ensure_process()
+        assert self._process and self._process.stdin
+        try:
+            self._process.stdin.write(json.dumps({"jsonrpc": "2.0", "method": method, "params": {}}) + "\n")
             self._process.stdin.flush()
-            line = self._process.stdout.readline()
-            if not line:
-                raise RuntimeError("MCP server closed stdout")
-            response = json.loads(line)
-            if "error" in response:
-                raise RuntimeError(response["error"]["message"])
-            return response["result"]
+        except BrokenPipeError as exc:
+            raise RuntimeError(self._diagnostics()) from exc
 
     def _notify(self, method: str) -> None:
         with self._lock:
-            assert self._process.stdin
-            self._process.stdin.write(json.dumps({"jsonrpc": "2.0", "method": method, "params": {}}) + "\n")
-            self._process.stdin.flush()
+            self._notify_unlocked(method)
 
-    def _initialize(self) -> dict[str, Any]:
-        result = self._request("initialize", {
+    def _initialize_unlocked(self) -> dict[str, Any]:
+        result = self._request_unlocked("initialize", {
             "protocolVersion": "2025-06-18", "capabilities": {},
             "clientInfo": {"name": "llm-wiki-gui", "title": "LLM WIKI GUI", "version": "4.0.0"},
         })
-        self._notify("notifications/initialized")
+        self._notify_unlocked("notifications/initialized")
         return result
 
     def list_tools(self) -> list[dict[str, Any]]:
@@ -76,13 +133,15 @@ class MCPClient:
         return list(self._history)
 
     def close(self) -> None:
-        if self._process.poll() is None:
-            if self._process.stdin:
-                self._process.stdin.close()
+        process = self._process
+        if process and process.poll() is None:
+            if process.stdin:
+                process.stdin.close()
             try:
-                self._process.wait(timeout=2)
+                process.wait(timeout=2)
             except subprocess.TimeoutExpired:
-                self._process.terminate()
+                process.terminate()
+        self._close_process_pipes()
 
 
 __all__ = ["MCPClient"]

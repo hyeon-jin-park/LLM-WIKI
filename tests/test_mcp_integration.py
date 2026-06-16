@@ -24,5 +24,11 @@ class MCPIntegrationTest(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(result["page_count"], 0)
 
+    def test_client_recovers_if_stdio_server_exits(self):
+        self.client._process.terminate()
+        self.client._process.wait(timeout=5)
+        names = [item["name"] for item in self.client.list_tools()]
+        self.assertIn("draft_page_from_raw", names)
+
 
 if __name__ == "__main__": unittest.main()

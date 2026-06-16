@@ -66,6 +66,8 @@ python3 run.py
 python3 run.py --no-open
 ```
 
+자료 추가, 초안 생성, Wiki 저장은 Python 서버와 MCP subprocess만으로 동작합니다. Codex CLI는 선택적 Chat 탭에서만 사용됩니다.
+
 ### 2. 자료 1건 추가
 
 1. 화면 중앙의 **첫 자료 추가** 또는 상단의 **+ 자료 추가**를 누릅니다.
