@@ -25,6 +25,7 @@ def agent_status() -> dict[str, Any]:
     ollama = _find_ollama()
     provider = "codex-cli" if codex else ("ollama" if ollama else "local-mcp")
     binary = codex or ollama
+    setup = _setup_guidance()
     return {
         "available": True,
         "provider": provider,
@@ -33,6 +34,7 @@ def agent_status() -> dict[str, Any]:
         "ollama_available": bool(ollama),
         "llm_available": bool(codex or ollama),
         "read_only": True,
+        "setup": setup,
     }
 
 
@@ -50,6 +52,29 @@ def _find_ollama() -> str | None:
         if binary:
             return binary
     return None
+
+
+def _setup_guidance() -> dict[str, Any]:
+    if _find_codex() or _find_ollama():
+        return {"needed": False, "message": "LLM provider is available."}
+    if os.name == "nt":
+        commands = [
+            "winget install Ollama.Ollama",
+            "ollama pull llama3.1",
+            "python run.py",
+        ]
+    else:
+        commands = [
+            "brew install ollama",
+            "ollama pull llama3.1",
+            "python3 run.py",
+        ]
+    return {
+        "needed": True,
+        "message": "Install Codex CLI or Ollama to enable translation, rewriting, and natural-language answers.",
+        "commands": commands,
+        "ollama_model_env": "LLM_WIKI_OLLAMA_MODEL",
+    }
 
 
 def _is_llm_request(query: str) -> bool:

@@ -51,6 +51,7 @@ class CLIAgentTest(unittest.TestCase):
         status = agent_status()
         self.assertTrue(status["available"])
         self.assertEqual(status["provider"], "local-mcp")
+        self.assertTrue(status["setup"]["needed"])
         result = answer_with_codex(self.call_tool, "What is context?")
         self.assertEqual(result["engine"], "local-mcp")
         self.assertIn("Context", result["answer"])

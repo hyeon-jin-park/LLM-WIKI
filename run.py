@@ -49,17 +49,35 @@ def check_project() -> None:
     print(f"[LLM WIKI] Ready: {validation['page_count']} pages, {len(tools)} MCP tools")
 
 
+def doctor() -> None:
+    from src.cli_agent import agent_status
+
+    check_project()
+    status = agent_status()
+    print(f"[LLM WIKI] Chat provider: {status['provider']}")
+    if status.get("binary"):
+        print(f"[LLM WIKI] Provider command: {status['binary']}")
+    if not status.get("llm_available"):
+        print("[LLM WIKI] Natural-language chat needs Codex CLI or Ollama.")
+        for command in status.get("setup", {}).get("commands", []):
+            print(f"  {command}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Set up and run LLM WIKI")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--check", action="store_true", help="check dependencies, MCP, and Wiki validation without starting the server")
+    parser.add_argument("--doctor", action="store_true", help="check Wiki, MCP, and optional LLM provider setup")
     parser.add_argument("--no-open", action="store_true", help="do not open the browser automatically")
     args = parser.parse_args()
 
     os.chdir(ROOT)
     ensure_venv()
     ensure_dependencies()
+    if args.doctor:
+        doctor()
+        return
     if args.check:
         check_project()
         return
