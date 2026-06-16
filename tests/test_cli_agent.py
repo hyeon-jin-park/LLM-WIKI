@@ -13,13 +13,27 @@ class CLIAgentTest(unittest.TestCase):
             return [{"path": "wiki/concepts/context.md", "title": "Context", "preview": "Working context"}]
         if name == "page_summary":
             return {"path": "wiki/concepts/context.md", "title": "Context", "summary": "A bounded working context.", "key_points": "- Preserve relevant knowledge.", "meta": {"type": "concept"}}
+        if name == "read_page":
+            return {"path": "wiki/concepts/context.md", "title": "Context", "meta": {"type": "concept"}, "content": "---\ntype: concept\nstatus: draft\ntags: test\nlast_verified: 2026-06-16\nsource_url: local://user-created\n---\n# Context\n\n## Summary\n\nA bounded working context.\n\n## Key Points\n\n- Preserve relevant knowledge.\n\n## Source\n\n- test\n\n## Related Pages\n\n## User Questions\n\n## Maintenance Notes\n\n"}
+        if name == "validate_wiki":
+            return {"ok": True, "page_count": 1, "raw_count": 0, "issues": []}
         raise AssertionError(name)
 
     @patch("src.cli_agent.shutil.which", return_value=None)
     def test_status_without_codex(self, _which):
-        self.assertFalse(agent_status()["available"])
-        with self.assertRaises(RuntimeError):
-            answer_with_codex(self.call_tool, "What is context?")
+        status = agent_status()
+        self.assertTrue(status["available"])
+        self.assertEqual(status["provider"], "local-mcp")
+        result = answer_with_codex(self.call_tool, "What is context?")
+        self.assertEqual(result["engine"], "local-mcp")
+        self.assertIn("Context", result["answer"])
+
+    @patch("src.cli_agent.shutil.which", return_value=None)
+    def test_local_polish_returns_approval_gated_action(self, _which):
+        result = answer_with_codex(self.call_tool, "현재 페이지 보기 좋게 정리해줘", "wiki/concepts/context.md")
+        self.assertEqual(result["engine"], "local-mcp")
+        self.assertEqual(result["action"]["type"], "apply_edit_suggestion")
+        self.assertIn("## Summary", result["action"]["content"])
 
     @patch("src.cli_agent.subprocess.run")
     @patch("src.cli_agent.shutil.which", return_value="/usr/local/bin/codex")
