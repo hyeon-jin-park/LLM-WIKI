@@ -2,28 +2,22 @@
 
 LLM WIKI는 사용자가 가진 Markdown, TXT, PDF 자료를 로컬에서 읽고, 검토 가능한 Markdown Wiki 페이지로 바꾸는 실행 가능한 Wiki 도구입니다. 처음 실행하면 Wiki는 비어 있으며, 사용자가 자료 1건을 넣고 초안을 승인하면 자기만의 Wiki 페이지가 만들어집니다.
 
-API Key를 코드에 넣지 않습니다. 자료 저장, 초안 생성, Wiki 반영, 검증은 모두 로컬 파일과 MCP Tool을 통해 동작합니다.
+자료 저장, 초안 생성, Wiki 반영, 검증은 모두 로컬 파일과 MCP Tool을 통해 동작합니다. 선택적 Chat 기능도 앱 내부에 별도 서비스 키를 보관하지 않고, 사용자의 로컬 CLI가 있을 때만 읽기 전용 subprocess로 연결됩니다.
 
 ![LLM WIKI empty workspace](mvp.png)
 
 실제 지식베이스가 렌더링된 예시는 [demo/usage-example.png](demo/usage-example.png)에 있습니다. 예시 내용은 실행 데이터로 포함되지 않습니다.
 
-## 제출 조건 대응
+## 포함된 구성
 
-| 요구 항목 | 이 Repository의 대응 파일 |
-| --- | --- |
-| 하네스 | `AGENTS.md`, `RULES.md`, `skills/wiki-curator/SKILL.md` |
-| Agent 운영지침 및 추가 컨텍스트 | `AGENTS.md`, `RULES.md`, `PRD.md`, `DOMAIN.md` |
-| SKILL 또는 Subagent/Hook 1개 이상 | `skills/wiki-curator/` |
-| LLM Wiki 구조 | `raw/`, `wiki/`, `schema/` |
-| Wiki Viewer | `app/` |
-| MCP 서버 | `tools/mcp_server.py` |
-| Agent가 접근 가능한 Tool 계층 | `tools/mcp_server.py`, `src/mcp_client.py`, `src/wiki_tool.py` |
-| 30분 안에 첫 Wiki 페이지 생성 가이드 | 이 README의 `30분 사용 가이드` |
-| MCP Tool 목록과 동작 | 이 README의 `MCP Tool 목록` |
-| 자료 투입 및 통합 요청 방법 | 이 README의 `자료 투입 → 초안 → 승인 → 통합` |
-| 검증 방법 | 이 README의 `검증` |
-| demo 캡처 | `demo/empty-workspace.png`, `demo/usage-example.png` |
+- `AGENTS.md`, `RULES.md`: Agent가 Wiki를 다룰 때 지켜야 할 운영 규칙
+- `skills/wiki-curator/`: 자료 정리, 초안 작성, 링크 추천, 검증을 위한 재사용 가능한 Skill
+- `raw/`: 사용자가 추가한 원본 자료 저장소
+- `wiki/`: 승인된 Markdown Wiki 페이지 저장소
+- `schema/`: Wiki 페이지와 raw item 규약
+- `tools/mcp_server.py`: Agent와 Viewer가 함께 사용할 수 있는 stdio MCP 서버
+- `app/`: 브라우저에서 Wiki를 보고 자료를 추가하는 Viewer
+- `demo/`: 실제 렌더링 화면 예시
 
 ## Repository 구조
 
@@ -38,12 +32,12 @@ skills/wiki-curator/ # 자료 정리, 초안, 링크, 검증을 위한 Skill
 demo/                # 실행 화면 캡처
 AGENTS.md            # Agent 운영 지침
 RULES.md             # 보안, 출처, 승인, 검증 규칙
-README.md            # 실행 및 제출 설명
+README.md            # 실행 및 사용 설명
 ```
 
 공개본의 `raw/`와 `wiki/`에는 `.gitkeep`만 들어 있습니다. 개인 자료나 미리 채워진 Wiki 페이지는 포함하지 않습니다.
 
-## 30분 사용 가이드
+## 빠른 시작
 
 ### 1. 설치 및 실행
 
@@ -175,7 +169,7 @@ After publishing, run source_trace and validate_wiki.
 3. `codex exec --ephemeral --sandbox read-only`를 subprocess로 실행합니다.
 4. Codex CLI는 읽기 전용 답변만 작성합니다.
 
-이 기능은 API Key를 코드에 직접 넣지 않습니다. Chat은 Wiki 페이지를 직접 생성하거나 수정할 수 없고, 변경 요청은 자료 추가/초안 승인 흐름으로 안내합니다.
+이 기능은 별도 클라우드 인증 정보를 요구하지 않습니다. Chat은 Wiki 페이지를 직접 생성하거나 수정할 수 없고, 변경 요청은 자료 추가/초안 승인 흐름으로 안내합니다.
 
 Codex CLI가 없어도 Wiki Viewer, MCP Tool, 자료 투입 파이프라인은 정상 동작합니다.
 
@@ -208,5 +202,5 @@ MCP smoke: validate_ok true
 - 원본 자료와 Wiki 저장은 로컬에서 수행됩니다.
 - 공개본에는 개인 raw 자료를 넣지 않습니다.
 - 공개본의 `raw/`와 `wiki/`는 빈 폴더 구조만 제공합니다.
-- `.env`, API Key, 개인 자료, cache, `.venv`, archive 폴더는 Git에서 제외합니다.
+- `.env`, 개인 자료, cache, `.venv`, archive 폴더는 Git에서 제외합니다.
 - `demo/usage-example.png`는 사용 증명용 화면 캡처이며 실행 데이터가 아닙니다.
