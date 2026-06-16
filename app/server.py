@@ -60,6 +60,7 @@ class Handler(SimpleHTTPRequestHandler):
             body = json.loads(self.rfile.read(length) or b"{}")
             self.handle_api_post(parsed.path, body)
         except Exception as exc:
+            sys.stderr.write(f"[llm-wiki] API error {parsed.path}: {exc}\n")
             self.json_response(500, {"error": str(exc)})
 
     def handle_api_get(self, path: str, query: dict[str, list[str]]) -> None:
@@ -77,6 +78,7 @@ class Handler(SimpleHTTPRequestHandler):
             if path == "/api/trace": return self.tool_response("source_trace", {"path": query.get("path", [""])[0].removeprefix("wiki/")})
             self.json_response(404, {"error": "not found"})
         except Exception as exc:
+            sys.stderr.write(f"[llm-wiki] API error {path}: {exc}\n")
             self.json_response(500, {"error": str(exc)})
 
     def handle_api_post(self, path: str, body: dict) -> None:
