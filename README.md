@@ -162,18 +162,30 @@ After publishing, run source_trace and validate_wiki.
 
 ## 선택적 Chat 기능
 
-오른쪽 패널에는 `Tools / Chat` 탭이 있습니다. `codex` CLI가 로컬에 설치되어 있으면 Chat이 자동으로 활성화됩니다.
+오른쪽 패널에는 `Tools / Chat` 탭이 있습니다. Chat은 세 단계로 동작합니다.
+
+- `codex` CLI가 있으면 Codex subprocess를 사용합니다.
+- Codex가 없고 `ollama` CLI가 있으면 Ollama subprocess를 사용합니다.
+- 둘 다 없으면 `local-mcp` 모드로 동작합니다.
+
+`local-mcp`는 LLM이 아니라 규칙 기반 작업자입니다. 검색, 원본 목록 확인, 초안 생성, 관련 링크 삽입안, 정리안, 검증은 처리할 수 있지만 번역, 재작성, 자연스러운 설명 같은 작업은 흉내 내지 않습니다.
 
 동작 방식:
 
 1. 서버가 MCP 읽기 Tool로 현재 Wiki 근거를 검색합니다.
-2. 선택된 페이지와 관련 요약을 증거로 묶습니다.
-3. `codex exec --ephemeral --sandbox read-only`를 subprocess로 실행합니다.
-4. Codex CLI는 읽기 전용 답변만 작성합니다.
+2. 선택된 페이지가 있으면 전체 Markdown 내용을 함께 전달합니다.
+3. Codex 또는 Ollama가 있으면 읽기 전용 subprocess로 자연어 작업을 요청합니다.
+4. LLM provider가 없으면 local-mcp가 가능한 작업만 수행하고, 번역/재작성 요청에는 필요한 provider를 안내합니다.
+
+Ollama 모델은 기본적으로 `llama3.1`을 사용합니다. 다른 모델을 쓰려면 실행 전에 환경변수를 지정합니다.
+
+```bash
+LLM_WIKI_OLLAMA_MODEL=qwen2.5 python3 run.py
+```
 
 Chat은 Wiki 페이지를 직접 생성하거나 수정할 수 없습니다. 변경 요청은 자료 추가/초안 승인 흐름으로 안내합니다.
 
-Codex CLI가 없어도 Wiki Viewer, MCP Tool, 자료 투입 파이프라인은 정상 동작합니다.
+Codex나 Ollama가 없어도 Wiki Viewer, MCP Tool, 자료 투입 파이프라인은 정상 동작합니다.
 
 ## 검증
 

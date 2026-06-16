@@ -56,6 +56,13 @@ class CLIAgentTest(unittest.TestCase):
         self.assertIn("Context", result["answer"])
 
     @patch("src.cli_agent.shutil.which", return_value=None)
+    def test_local_mode_does_not_fake_translation(self, _which):
+        result = answer_with_codex(self.call_tool, "현재 페이지를 한글로 번역해줘", "wiki/concepts/context.md")
+        self.assertEqual(result["engine"], "local-mcp")
+        self.assertTrue(result["needs_llm"])
+        self.assertIn("LLM이 필요한 작업", result["answer"])
+
+    @patch("src.cli_agent.shutil.which", return_value=None)
     def test_local_polish_returns_approval_gated_action(self, _which):
         result = answer_with_codex(self.call_tool, "현재 페이지 보기 좋게 정리해줘", "wiki/concepts/context.md")
         self.assertEqual(result["engine"], "local-mcp")
@@ -98,7 +105,18 @@ class CLIAgentTest(unittest.TestCase):
         command = run.call_args.args[0]
         self.assertIn("read-only", command)
         self.assertIn("--ephemeral", command)
-        self.assertIn("MCP Wiki evidence", run.call_args.kwargs["input"])
+        self.assertIn("Search evidence", run.call_args.kwargs["input"])
+
+    @patch("src.cli_agent._find_ollama", return_value="/usr/local/bin/ollama")
+    @patch("src.cli_agent._find_codex", return_value=None)
+    @patch("src.cli_agent.subprocess.run")
+    def test_ollama_handles_translation_requests(self, run, _codex, _ollama):
+        run.return_value = subprocess.CompletedProcess([], 0, stdout="번역된 내용입니다.", stderr="")
+        result = answer_with_codex(self.call_tool, "현재 페이지를 한글로 번역해줘", "wiki/concepts/context.md")
+        self.assertEqual(result["engine"], "ollama")
+        self.assertEqual(result["answer"], "번역된 내용입니다.")
+        command = run.call_args.args[0]
+        self.assertEqual(command[:2], ["/usr/local/bin/ollama", "run"])
 
 
 if __name__ == "__main__": unittest.main()

@@ -7,6 +7,7 @@ still handles common Wiki operations and returns approval-gated edit drafts.
 from __future__ import annotations
 
 import json
+import os
 import posixpath
 import shutil
 import subprocess
@@ -20,12 +21,17 @@ ToolCaller = Callable[[str, dict[str, Any] | None], Any]
 
 
 def agent_status() -> dict[str, Any]:
-    binary = _find_codex()
+    codex = _find_codex()
+    ollama = _find_ollama()
+    provider = "codex-cli" if codex else ("ollama" if ollama else "local-mcp")
+    binary = codex or ollama
     return {
         "available": True,
-        "provider": "codex-cli" if binary else "local-mcp",
+        "provider": provider,
         "binary": Path(binary).name if binary else "",
-        "codex_available": bool(binary),
+        "codex_available": bool(codex),
+        "ollama_available": bool(ollama),
+        "llm_available": bool(codex or ollama),
         "read_only": True,
     }
 
@@ -36,6 +42,23 @@ def _find_codex() -> str | None:
         if binary:
             return binary
     return None
+
+
+def _find_ollama() -> str | None:
+    for name in ("ollama", "ollama.exe"):
+        binary = shutil.which(name)
+        if binary:
+            return binary
+    return None
+
+
+def _is_llm_request(query: str) -> bool:
+    lower = query.casefold()
+    return any(word in lower for word in (
+        "번역", "translate", "한글로", "한국어로", "영어로", "일본어로", "중국어로",
+        "다시 써", "재작성", "rewrite", "자연스럽게", "쉽게 설명", "설명해",
+        "말투", "톤", "문장", "표현", "풀어서", "요약해줘",
+    ))
 
 
 def _collect_context(call_tool: ToolCaller, question: str, page_path: str = "") -> tuple[list[dict[str, Any]], list[dict[str, str]], list[dict[str, Any]]]:
@@ -296,8 +319,18 @@ def _local_answer(call_tool: ToolCaller, query: str, page_path: str = "") -> dic
             "action": {"type": "apply_edit_suggestion", "label": "편집기에 적용", "path": page["path"], "content": suggestion},
         }
 
+    if _is_llm_request(query):
+        return {
+            "answer": "이 요청은 번역, 재작성, 자연어 설명처럼 LLM이 필요한 작업입니다.\n\n현재는 `Codex CLI`나 `Ollama`가 감지되지 않아 로컬 규칙 엔진만 동작하고 있습니다. local-mcp는 검색, 초안 생성, 링크 삽입, 검증은 할 수 있지만 자연스러운 번역이나 재작성은 일부러 흉내 내지 않습니다.\n\n사용하려면 둘 중 하나를 설치한 뒤 다시 실행하세요.\n- Codex CLI: `codex` 명령이 PATH에 있어야 합니다.\n- Ollama: `ollama` 명령과 사용할 모델이 필요합니다. 기본 모델은 `llama3.1`이고, `LLM_WIKI_OLLAMA_MODEL` 환경변수로 바꿀 수 있습니다.",
+            "sources": sources,
+            "tool_calls": calls,
+            "engine": "local-mcp",
+            "read_only": True,
+            "needs_llm": True,
+        }
+
     if evidence:
-        lines = ["Wiki에서 찾은 근거를 기준으로 답변합니다."]
+        lines = ["로컬 MCP 검색 결과입니다. 자연어 번역/재작성은 LLM provider가 연결되어 있을 때 처리됩니다."]
         for item in evidence[:4]:
             summary = item.get("summary") or item.get("key_points") or ""
             lines.append(f"\n**{item.get('title')}**\n{summary[:420] or '요약 정보가 비어 있습니다.'}")
@@ -321,46 +354,91 @@ def _is_tool_command(query: str) -> bool:
     ))
 
 
+def _current_page(call_tool: ToolCaller, page_path: str, calls: list[dict[str, Any]]) -> dict[str, Any] | None:
+    if not page_path:
+        return None
+    args = {"path": page_path.removeprefix("wiki/")}
+    try:
+        page = call_tool("read_page", args)
+        calls.append({"tool": "read_page", "arguments": args})
+        return page
+    except (FileNotFoundError, RuntimeError, ValueError):
+        return None
+
+
+def _build_llm_prompt(query: str, page_path: str, evidence: list[dict[str, Any]], current: dict[str, Any] | None, recent: list[dict[str, str]]) -> str:
+    recent_trimmed = [
+        {"role": item.get("role"), "content": str(item.get("content", ""))[:1000]}
+        for item in recent[-6:] if item.get("role") in {"user", "assistant"}
+    ]
+    page_content = (current or {}).get("content", "")
+    evidence_json = json.dumps(evidence, ensure_ascii=False)
+    return f"""You are the natural-language worker inside LLM WIKI.
+Answer in Korean unless the user explicitly asks for another language.
+
+You may translate, rewrite, explain, compare, or summarize using the provided Wiki evidence.
+If the user asks to translate or rewrite the current page, use the current page content below, not only the summary.
+Do not claim that files were changed. If you produce edited text, present it as a proposal.
+Do not invent facts that are not present in the page or evidence.
+Keep the answer useful and direct. Avoid saying "based on wiki evidence" unless it matters.
+
+Current page path: {page_path or 'none'}
+Current page content:
+---
+{page_content[:12000] if page_content else 'none'}
+---
+
+Search evidence:
+{evidence_json[:12000]}
+
+Recent conversation:
+{json.dumps(recent_trimmed, ensure_ascii=False)}
+
+User request:
+{query}
+"""
+
+
+def _run_codex(binary: str, prompt: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [binary, "exec", "--ephemeral", "--sandbox", "read-only", "-C", str(ROOT), "-"],
+        input=prompt, text=True, capture_output=True, timeout=120,
+    )
+
+
+def _run_ollama(binary: str, prompt: str) -> subprocess.CompletedProcess[str]:
+    model = os.environ.get("LLM_WIKI_OLLAMA_MODEL", "llama3.1")
+    return subprocess.run(
+        [binary, "run", model],
+        input=prompt, text=True, capture_output=True, timeout=180,
+    )
+
+
 def answer_with_codex(call_tool: ToolCaller, question: str, page_path: str = "", history: list[dict[str, str]] | None = None) -> dict[str, Any]:
     query = question.strip()
     if not query:
         raise ValueError("질문을 입력해 주세요.")
-    if _is_tool_command(query):
+    if _is_tool_command(query) and not _is_llm_request(query):
         return _local_answer(call_tool, query, page_path)
-    binary = _find_codex()
-    if not binary:
+    codex = _find_codex()
+    ollama = _find_ollama()
+    if not codex and not ollama:
         return _local_answer(call_tool, query, page_path)
 
     evidence, sources, calls = _collect_context(call_tool, query, page_path)
-    recent = [
-        {"role": item.get("role"), "content": str(item.get("content", ""))[:1200]}
-        for item in (history or [])[-6:] if item.get("role") in {"user", "assistant"}
-    ]
-    prompt = f"""You are the read-only chat assistant inside LLM WIKI.
-Answer naturally in Korean unless the user asks for another language.
-The application already retrieved Wiki evidence through MCP. Base factual claims about the user's knowledge base only on that evidence.
-If the Wiki is empty or evidence is missing, say so clearly. You may explain how to use LLM WIKI using README.md.
-Never edit files, run write operations, or claim that a page was created or changed. Direct write requests to the visible 자료 추가 or 편집 approval flow.
-Do not reveal chain-of-thought. Give a concise final answer and mention relevant Wiki page names when evidence exists.
-
-Current page: {page_path or 'none'}
-Recent conversation: {json.dumps(recent, ensure_ascii=False)}
-MCP Wiki evidence: {json.dumps(evidence, ensure_ascii=False)}
-User question: {query}
-"""
-    completed = subprocess.run(
-        [binary, "exec", "--ephemeral", "--sandbox", "read-only", "-C", str(ROOT), "-"],
-        input=prompt, text=True, capture_output=True, timeout=120,
-    )
+    current = _current_page(call_tool, page_path, calls)
+    prompt = _build_llm_prompt(query, page_path, evidence, current, history or [])
+    provider = "codex-cli" if codex else "ollama"
+    completed = _run_codex(codex, prompt) if codex else _run_ollama(ollama, prompt)
     if completed.returncode != 0:
         fallback = _local_answer(call_tool, query, page_path)
-        fallback["answer"] = "Codex CLI 호출에 실패해서 로컬 MCP 모드로 답변합니다.\n\n" + fallback["answer"]
-        fallback["codex_error"] = (completed.stderr or "Codex CLI 실행에 실패했습니다.")[-700:]
+        fallback["answer"] = f"{provider} 호출에 실패해서 로컬 MCP 모드로 전환했습니다.\n\n" + fallback["answer"]
+        fallback["llm_error"] = (completed.stderr or f"{provider} 실행에 실패했습니다.")[-900:]
         return fallback
     answer = completed.stdout.strip()
     if not answer:
         return _local_answer(call_tool, query, page_path)
-    return {"answer": answer, "sources": sources, "tool_calls": calls, "engine": "codex-cli", "read_only": True}
+    return {"answer": answer, "sources": sources, "tool_calls": calls, "engine": provider, "read_only": True}
 
 
 __all__ = ["agent_status", "answer_with_codex"]
